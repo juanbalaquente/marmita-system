@@ -11,6 +11,7 @@ export type PedidoStatus =
   | 'cancelado'
 
 export type PedidoTipo = 'local' | 'delivery' | 'retirada'
+export type FormaPagamento = 'pix' | 'dinheiro' | 'cartao' | 'fiado'
 
 export interface Produto {
   id: string
@@ -47,6 +48,10 @@ export interface Pedido {
   total: number
   observacao: string | null
   tipo: PedidoTipo
+  forma_pagamento: FormaPagamento | null
+  taxa_entrega: number
+  endereco_entrega: string | null
+  motivo_cancelamento: string | null
   created_at: string
   clientes?: Cliente | null
   pedido_itens?: PedidoItem[]

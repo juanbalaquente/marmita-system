@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { usePedidos } from '@/lib/hooks/use-pedidos'
 import { useAlertas } from '@/lib/hooks/use-alertas'
+import { useSomNovoPedido } from '@/lib/hooks/use-som-novo-pedido'
 import { PedidoCard } from '@/components/shared/pedido-card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { PedidoStatus } from '@/lib/types'
@@ -18,6 +19,7 @@ const COLUNAS: { status: PedidoStatus; label: string; color: string; badge: stri
 export function KanbanPedidos() {
   const { pedidos, loading, atualizarStatus } = usePedidos()
   const alertando = useAlertas(pedidos)
+  useSomNovoPedido(pedidos)
   const [colunaAtiva, setColunaAtiva] = useState<PedidoStatus>('pendente')
 
   if (loading) {

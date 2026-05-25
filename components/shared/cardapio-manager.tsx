@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -23,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { toast } from 'sonner'
-import { Plus, Pencil, BookOpen } from 'lucide-react'
+import { Plus, Pencil, BookOpen, TrendingUp } from 'lucide-react'
 import type { Produto } from '@/lib/types'
 
 const CATEGORIAS = ['marmita', 'massa', 'bebida', 'sobremesa', 'outros']
@@ -154,15 +153,26 @@ function ProdutoDialog({
 export function CardapioManager() {
   const supabase = createClient()
   const [produtos, setProdutos] = useState<Produto[]>([])
+  const [custos, setCustos] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
 
   const fetchProdutos = useCallback(async () => {
-    const { data } = await supabase
-      .from('produtos')
-      .select('*')
-      .order('categoria')
-      .order('nome')
-    setProdutos((data ?? []) as Produto[])
+    const [prodRes, piRes] = await Promise.all([
+      supabase.from('produtos').select('*').order('categoria').order('nome'),
+      supabase.from('produto_ingredientes').select('produto_id, quantidade, ingredientes(custo_unitario)'),
+    ])
+
+    if (prodRes.data) setProdutos(prodRes.data as Produto[])
+
+    // Build cost map: produto_id -> total cost
+    const mapa: Record<string, number> = {}
+    for (const pi of piRes.data ?? []) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const item = pi as any
+      const custo = Number(item.quantidade) * Number(item.ingredientes?.custo_unitario ?? 0)
+      mapa[item.produto_id] = (mapa[item.produto_id] ?? 0) + custo
+    }
+    setCustos(mapa)
     setLoading(false)
   }, [supabase])
 
@@ -215,33 +225,52 @@ export function CardapioManager() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {produtos
               .filter((p) => p.categoria === cat)
-              .map((produto) => (
-                <Card key={produto.id} className={!produto.disponivel ? 'opacity-60' : ''}>
-                  <CardHeader className="pb-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <CardTitle className="text-sm leading-snug">{produto.nome}</CardTitle>
-                      <div className="flex shrink-0 items-center gap-1">
-                        <ProdutoDialog produto={produto} onSaved={fetchProdutos} />
+              .map((produto) => {
+                const preco = Number(produto.preco)
+                const custo = custos[produto.id] ?? 0
+                const margem = custo > 0 ? ((preco - custo) / preco) * 100 : null
+
+                return (
+                  <Card key={produto.id} className={!produto.disponivel ? 'opacity-60' : ''}>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <CardTitle className="text-sm leading-snug">{produto.nome}</CardTitle>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <ProdutoDialog produto={produto} onSaved={fetchProdutos} />
+                        </div>
                       </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="flex items-center justify-between">
-                    <p className="text-lg font-bold">
-                      R$ {Number(produto.preco).toFixed(2).replace('.', ',')}
-                    </p>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-muted-foreground">
-                        {produto.disponivel ? 'Ativo' : 'Inativo'}
-                      </span>
-                      <Switch
-                        checked={produto.disponivel}
-                        onCheckedChange={() => toggleDisponivel(produto)}
-                        className="scale-75"
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-lg font-bold">
+                          R$ {preco.toFixed(2).replace('.', ',')}
+                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-muted-foreground">
+                            {produto.disponivel ? 'Ativo' : 'Inativo'}
+                          </span>
+                          <Switch
+                            checked={produto.disponivel}
+                            onCheckedChange={() => toggleDisponivel(produto)}
+                            className="scale-75"
+                          />
+                        </div>
+                      </div>
+                      {margem !== null && (
+                        <div className="flex items-center gap-1.5 text-xs">
+                          <TrendingUp className={`size-3 ${margem >= 50 ? 'text-green-500' : margem >= 30 ? 'text-amber-500' : 'text-red-500'}`} />
+                          <span className={`font-medium ${margem >= 50 ? 'text-green-600 dark:text-green-400' : margem >= 30 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {margem.toFixed(0)}% margem
+                          </span>
+                          <span className="text-muted-foreground">
+                            (custo R$ {custo.toFixed(2).replace('.', ',')})
+                          </span>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })}
           </div>
         </div>
       ))}

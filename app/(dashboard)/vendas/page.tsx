@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { BarChart2, TrendingUp } from 'lucide-react'
+import { BarChart2, TrendingUp, Trophy } from 'lucide-react'
 
 type PedidoRow = {
   id: string
@@ -20,6 +20,8 @@ const STATUS_COLOR: Record<string, string> = {
   cancelado:  'bg-red-100 text-red-700',
 }
 
+const MEDAL = ['🥇', '🥈', '🥉']
+
 export default async function VendasPage() {
   const supabase = await createClient()
 
@@ -27,11 +29,44 @@ export default async function VendasPage() {
   hoje.setHours(0, 0, 0, 0)
   const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
 
+  // Fetch orders for summaries
   const [diaRes, mesRes, todosPedidosRes] = await Promise.all([
     supabase.from('pedidos').select('total, status').gte('created_at', hoje.toISOString()).neq('status', 'cancelado'),
     supabase.from('pedidos').select('total, status').gte('created_at', inicioMes.toISOString()).neq('status', 'cancelado'),
     supabase.from('pedidos').select('id, total, status, tipo, created_at').order('created_at', { ascending: false }).limit(50),
   ])
+
+  // Top products: two-step query (PostgREST can't filter by joined table column)
+  const hojeOrdersRes = await supabase
+    .from('pedidos')
+    .select('id')
+    .gte('created_at', inicioMes.toISOString())
+    .neq('status', 'cancelado')
+
+  const hojeIds = (hojeOrdersRes.data ?? []).map((p: { id: string }) => p.id)
+
+  const rankingRes = hojeIds.length > 0
+    ? await supabase
+        .from('pedido_itens')
+        .select('produto_id, quantidade, produtos(nome)')
+        .in('pedido_id', hojeIds)
+    : { data: [] }
+
+  // Aggregate ranking
+  const rankMap = new Map<string, { nome: string; quantidade: number }>()
+  for (const item of rankingRes.data ?? []) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const it = item as any
+    const id: string = it.produto_id
+    const nome: string = it.produtos?.nome ?? '?'
+    const qty = Number(it.quantidade)
+    const existing = rankMap.get(id)
+    if (existing) existing.quantidade += qty
+    else rankMap.set(id, { nome, quantidade: qty })
+  }
+  const topProdutos = [...rankMap.values()]
+    .sort((a, b) => b.quantidade - a.quantidade)
+    .slice(0, 10)
 
   const pedidosDia = (diaRes.data ?? []) as Pick<PedidoRow, 'total' | 'status'>[]
   const pedidosMes = (mesRes.data ?? []) as Pick<PedidoRow, 'total' | 'status'>[]
@@ -42,9 +77,9 @@ export default async function VendasPage() {
   const ticketMedioDia = pedidosDia.length > 0 ? totalDia / pedidosDia.length : 0
 
   const resumo = [
-    { title: 'Vendas hoje',        value: `R$ ${totalDia.toFixed(2).replace('.', ',')}`,        sub: `${pedidosDia.length} pedidos`,  icon: TrendingUp },
-    { title: 'Vendas no mês',      value: `R$ ${totalMes.toFixed(2).replace('.', ',')}`,        sub: `${pedidosMes.length} pedidos`,  icon: BarChart2  },
-    { title: 'Ticket médio (hoje)',value: `R$ ${ticketMedioDia.toFixed(2).replace('.', ',')}`, sub: 'por pedido',                    icon: BarChart2  },
+    { title: 'Vendas hoje',         value: `R$ ${totalDia.toFixed(2).replace('.', ',')}`,        sub: `${pedidosDia.length} pedidos`,  icon: TrendingUp },
+    { title: 'Vendas no mês',       value: `R$ ${totalMes.toFixed(2).replace('.', ',')}`,        sub: `${pedidosMes.length} pedidos`,  icon: BarChart2  },
+    { title: 'Ticket médio (hoje)', value: `R$ ${ticketMedioDia.toFixed(2).replace('.', ',')}`, sub: 'por pedido',                    icon: BarChart2  },
   ]
 
   return (
@@ -68,6 +103,42 @@ export default async function VendasPage() {
           </Card>
         ))}
       </div>
+
+      {/* Ranking de produtos */}
+      {topProdutos.length > 0 && (
+        <div>
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+            <Trophy className="size-4 text-amber-500" />
+            Produtos mais vendidos (mês)
+          </h2>
+          <div className="overflow-hidden rounded-xl border bg-card">
+            {topProdutos.map((p, i) => {
+              const max = topProdutos[0].quantidade
+              const pct = Math.round((p.quantidade / max) * 100)
+              return (
+                <div
+                  key={p.nome + i}
+                  className="flex items-center gap-3 border-b px-4 py-2.5 last:border-0 hover:bg-muted/30"
+                >
+                  <span className="w-6 text-center text-base">{MEDAL[i] ?? `${i + 1}.`}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate text-sm font-medium">{p.nome}</p>
+                    <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-primary transition-all"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums">
+                    {p.quantidade} un.
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       <div>
         <h2 className="mb-3 text-sm font-semibold">Pedidos recentes</h2>

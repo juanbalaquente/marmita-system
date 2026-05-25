@@ -45,19 +45,17 @@ export function usePedidos() {
   }, [fetchPedidos, supabase])
 
   const atualizarStatus = useCallback(
-    async (pedidoId: string, novoStatus: PedidoStatus) => {
-      // Atualiza localmente já (sem esperar o Realtime)
+    async (pedidoId: string, novoStatus: PedidoStatus, extra?: Record<string, unknown>) => {
       setPedidos((prev) =>
-        prev.map((p) => (p.id === pedidoId ? { ...p, status: novoStatus } : p)),
+        prev.map((p) => (p.id === pedidoId ? { ...p, status: novoStatus, ...(extra ?? {}) } : p)),
       )
 
       const { error } = await supabase
         .from('pedidos')
-        .update({ status: novoStatus })
+        .update({ status: novoStatus, ...(extra ?? {}) })
         .eq('id', pedidoId)
 
       if (error) {
-        // Reverte se der erro
         fetchPedidos()
         throw error
       }

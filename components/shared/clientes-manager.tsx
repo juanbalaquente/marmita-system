@@ -15,8 +15,115 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
-import { Plus, Pencil, Users, Star } from 'lucide-react'
+import { Plus, Pencil, Users, Star, History } from 'lucide-react'
 import type { Cliente } from '@/lib/types'
+
+const STATUS_COLOR: Record<string, string> = {
+  pendente:   'bg-gray-100 text-gray-700',
+  confirmado: 'bg-blue-100 text-blue-700',
+  em_preparo: 'bg-amber-100 text-amber-700',
+  pronto:     'bg-green-100 text-green-700',
+  entregue:   'bg-muted text-muted-foreground',
+  cancelado:  'bg-red-100 text-red-700',
+}
+
+type PedidoHistorico = {
+  id: string
+  total: number
+  status: string
+  tipo: string
+  created_at: string
+}
+
+function HistoricoDialog({ cliente }: { cliente: Cliente }) {
+  const supabase = createClient()
+  const [open, setOpen] = useState(false)
+  const [pedidos, setPedidos] = useState<PedidoHistorico[]>([])
+  const [loading, setLoading] = useState(false)
+
+  async function loadHistorico() {
+    setLoading(true)
+    const { data } = await supabase
+      .from('pedidos')
+      .select('id, total, status, tipo, created_at')
+      .eq('cliente_id', cliente.id)
+      .order('created_at', { ascending: false })
+      .limit(30)
+    setPedidos((data ?? []) as PedidoHistorico[])
+    setLoading(false)
+  }
+
+  function handleOpen(v: boolean) {
+    setOpen(v)
+    if (v) loadHistorico()
+  }
+
+  const totalGasto = pedidos
+    .filter((p) => p.status !== 'cancelado')
+    .reduce((a, p) => a + Number(p.total), 0)
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpen}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon" className="size-7 shrink-0" title="Ver histórico">
+          <History className="size-3.5" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Histórico — {cliente.nome}</DialogTitle>
+        </DialogHeader>
+
+        {loading ? (
+          <div className="space-y-2 py-4">
+            {[1, 2, 3].map((i) => <div key={i} className="h-12 animate-pulse rounded-lg bg-muted" />)}
+          </div>
+        ) : pedidos.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">Nenhum pedido encontrado</p>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2 text-sm">
+              <span className="text-muted-foreground">{pedidos.length} pedidos</span>
+              <span className="font-semibold">
+                Total gasto: R$ {totalGasto.toFixed(2).replace('.', ',')}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {pedidos.map((p) => (
+                <div key={p.id} className="flex items-center justify-between rounded-lg border bg-card px-3 py-2.5">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-muted-foreground">
+                        #{p.id.slice(0, 6).toUpperCase()}
+                      </span>
+                      <Badge variant="outline" className={`text-[10px] ${STATUS_COLOR[p.status] ?? ''}`}>
+                        {p.status.replace('_', ' ')}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(p.created_at).toLocaleString('pt-BR', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                      {' · '}
+                      <span className="capitalize">{p.tipo}</span>
+                    </p>
+                  </div>
+                  <span className="font-semibold">
+                    R$ {Number(p.total).toFixed(2).replace('.', ',')}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 function ClienteDialog({
   cliente,
@@ -225,7 +332,10 @@ export function ClientesManager() {
                       {c.telefone && <p className="text-sm text-muted-foreground">{c.telefone}</p>}
                       {c.email && <p className="text-xs text-muted-foreground">{c.email}</p>}
                     </div>
-                    <ClienteDialog cliente={c} onSaved={fetchClientes} />
+                    <div className="flex items-center gap-1">
+                      <HistoricoDialog cliente={c} />
+                      <ClienteDialog cliente={c} onSaved={fetchClientes} />
+                    </div>
                   </div>
                   <div className="mt-2 flex items-center gap-3">
                     <span className="inline-flex items-center gap-1 text-sm">
@@ -280,7 +390,10 @@ export function ClientesManager() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <ClienteDialog cliente={c} onSaved={fetchClientes} />
+                        <div className="flex items-center justify-end gap-1">
+                          <HistoricoDialog cliente={c} />
+                          <ClienteDialog cliente={c} onSaved={fetchClientes} />
+                        </div>
                       </td>
                     </tr>
                   )

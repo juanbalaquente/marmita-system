@@ -43,6 +43,9 @@ export function NovoPedidoDialog({ onCriado }: Props) {
 
   const [clienteId, setClienteId] = useState<string>('sem-cliente')
   const [tipo, setTipo] = useState<'local' | 'delivery' | 'retirada'>('local')
+  const [formaPagamento, setFormaPagamento] = useState<string>('')
+  const [taxaEntrega, setTaxaEntrega] = useState<string>('0')
+  const [enderecoEntrega, setEnderecoEntrega] = useState<string>('')
   const [observacao, setObservacao] = useState('')
   const [itens, setItens] = useState<ItemPedido[]>([])
   const [usarPontos, setUsarPontos] = useState(false)
@@ -56,7 +59,8 @@ export function NovoPedidoDialog({ onCriado }: Props) {
     (sum, item) => sum + item.quantidade * Number(item.produto.preco),
     0,
   )
-  const total = Math.max(0, subtotal - (usarPontos ? valorDesconto : 0))
+  const taxaEntregaNum = tipo === 'delivery' ? parseFloat(taxaEntrega) || 0 : 0
+  const total = Math.max(0, subtotal + taxaEntregaNum - (usarPontos ? valorDesconto : 0))
 
   useEffect(() => {
     if (!open) return
@@ -98,6 +102,9 @@ export function NovoPedidoDialog({ onCriado }: Props) {
   function resetForm() {
     setClienteId('sem-cliente')
     setTipo('local')
+    setFormaPagamento('')
+    setTaxaEntrega('0')
+    setEnderecoEntrega('')
     setObservacao('')
     setItens([])
     setUsarPontos(false)
@@ -120,7 +127,10 @@ export function NovoPedidoDialog({ onCriado }: Props) {
           status: 'pendente',
           total,
           observacao: observacao.trim() || null,
-        })
+          forma_pagamento: formaPagamento || null,
+          taxa_entrega: taxaEntregaNum,
+          endereco_entrega: tipo === 'delivery' ? enderecoEntrega.trim() || null : null,
+        } as never)
         .select('id')
         .single()
 
@@ -128,7 +138,7 @@ export function NovoPedidoDialog({ onCriado }: Props) {
 
       const { error: itensErr } = await supabase.from('pedido_itens').insert(
         itens.map((item) => ({
-          pedido_id: pedido.id,
+          pedido_id: (pedido as { id: string }).id,
           produto_id: item.produto.id,
           quantidade: item.quantidade,
           preco_unitario: Number(item.produto.preco),
@@ -144,7 +154,7 @@ export function NovoPedidoDialog({ onCriado }: Props) {
         }).then(async () => {
           await supabase.from('transacoes_pontos').insert({
             cliente_id: clienteId,
-            pedido_id: pedido.id,
+            pedido_id: (pedido as { id: string }).id,
             pontos: -pontosUsados,
             descricao: `Desconto aplicado (R$ ${valorDesconto.toFixed(2)})`,
           })
@@ -216,6 +226,47 @@ export function NovoPedidoDialog({ onCriado }: Props) {
               </Select>
             </div>
           </div>
+
+          {/* Forma de Pagamento */}
+          <div className="space-y-1.5">
+            <Label>Forma de Pagamento</Label>
+            <Select value={formaPagamento} onValueChange={setFormaPagamento}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecionar (opcional)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pix">PIX</SelectItem>
+                <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                <SelectItem value="cartao">Cartão</SelectItem>
+                <SelectItem value="fiado">Fiado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Delivery: taxa + endereço */}
+          {tipo === 'delivery' && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Taxa de Entrega (R$)</Label>
+                <Input
+                  type="number"
+                  step="0.50"
+                  min="0"
+                  value={taxaEntrega}
+                  onChange={(e) => setTaxaEntrega(e.target.value)}
+                  placeholder="0,00"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Endereço de Entrega</Label>
+                <Input
+                  value={enderecoEntrega}
+                  onChange={(e) => setEnderecoEntrega(e.target.value)}
+                  placeholder="Rua, número, bairro…"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Produtos por categoria */}
           <div className="space-y-3">
@@ -305,6 +356,12 @@ export function NovoPedidoDialog({ onCriado }: Props) {
               <span>Subtotal</span>
               <span>R$ {subtotal.toFixed(2).replace('.', ',')}</span>
             </div>
+            {tipo === 'delivery' && taxaEntregaNum > 0 && (
+              <div className="flex justify-between text-muted-foreground">
+                <span>Taxa de entrega</span>
+                <span>R$ {taxaEntregaNum.toFixed(2).replace('.', ',')}</span>
+              </div>
+            )}
             {usarPontos && (
               <div className="flex justify-between text-green-600 dark:text-green-400">
                 <span>Desconto (pontos)</span>

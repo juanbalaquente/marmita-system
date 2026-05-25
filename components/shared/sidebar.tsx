@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   Tv2,
+  Receipt,
 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -29,6 +30,7 @@ const navItems = [
   { href: '/clientes',    label: 'Clientes',    icon: Users },
   { href: '/vendas',      label: 'Vendas',      icon: BarChart2 },
   { href: '/fidelizacao', label: 'Fidelização', icon: Star },
+  { href: '/caixa',       label: 'Caixa',       icon: Receipt },
 ]
 
 export function Sidebar() {

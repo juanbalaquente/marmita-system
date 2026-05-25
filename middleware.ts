@@ -39,7 +39,8 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/clientes') ||
     pathname.startsWith('/vendas') ||
     pathname.startsWith('/fidelizacao') ||
-    pathname.startsWith('/tv')
+    pathname.startsWith('/tv') ||
+    pathname.startsWith('/caixa')
 
   if (!user && isDashboardRoute) {
     const url = request.nextUrl.clone()

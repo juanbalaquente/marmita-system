@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { usePedidos } from '@/lib/hooks/use-pedidos'
 import { useAlertas } from '@/lib/hooks/use-alertas'
+import { useSomNovoPedido } from '@/lib/hooks/use-som-novo-pedido'
 import { toast } from 'sonner'
 import { ChevronRight, Clock, User, X } from 'lucide-react'
 import { NovoPedidoDialog } from '@/components/shared/novo-pedido-dialog'
@@ -208,6 +209,7 @@ function Coluna({
 export function KanbanTv() {
   const { pedidos, loading, atualizarStatus } = usePedidos()
   const alertando = useAlertas(pedidos)
+  useSomNovoPedido(pedidos)
   const [colunaAtiva, setColunaAtiva] = useState<PedidoStatus>('pendente')
 
   const colunasAtivas = COLUNAS.filter((c) => c.status !== 'entregue')
